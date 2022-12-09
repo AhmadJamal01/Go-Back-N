@@ -17,6 +17,7 @@
 #define __DATA_LINK_PROJECT_NODE_H_
 
 #include <omnetpp.h>
+#include "CustomMessage_m.h"
 
 using namespace omnetpp;
 
@@ -33,7 +34,9 @@ class Node : public cSimpleModule
     char ESCAPE = '/';
     virtual void initialize();
     virtual void handleMessage(cMessage *msg);
-    void getCurrentNodeState(cMessage *msg);
+    void getCurrentNodeState(CustomMessage_Base *msg);
+    void addParity (CustomMessage_Base* msg);
+    bool checkParity (CustomMessage_Base* msg);
 };
 
 #endif
