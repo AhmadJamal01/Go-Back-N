@@ -7,18 +7,12 @@ package data_link_project;
 network DataLink
 {
     submodules:
-        node0 : Node0;
-        node1 : Node1;
+        node[2] : Node;
         coordinator : Coordinator;
     connections:
-        coordinator.out++ --> node0.in++;
-        coordinator.out++ --> node1.in++;
-        node0.out --> node1.in++;
-        node1.out --> node0.in++;
-        
-        
-        
-        
-        
+        for i=0..1 {
+            coordinator.out++ --> node[i].in++;
+            node[i].out --> node[1-i].in++;
+        }     
 }
 

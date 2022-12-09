@@ -13,14 +13,27 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 
-package data_link_project;
+#ifndef __DATA_LINK_PROJECT_NODE_H_
+#define __DATA_LINK_PROJECT_NODE_H_
 
-//
-// TODO auto-generated module
-//
-simple Node0
+#include <omnetpp.h>
+
+using namespace omnetpp;
+
+/**
+ * TODO - Generated class
+ */
+class Node : public cSimpleModule
 {
-    gates:
-        input in[];
-        output out;
-}
+  protected:
+    // TEMP (Should be read from file)
+    std::string message = "Kak$ka/k";
+    // Byte stuffing constants
+    char FLAG = '$';
+    char ESCAPE = '/';
+    virtual void initialize();
+    virtual void handleMessage(cMessage *msg);
+    void getCurrentNodeState(cMessage *msg);
+};
+
+#endif
