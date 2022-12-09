@@ -14,15 +14,39 @@
 // 
 
 #include "node.h"
+#include "CustomMessage_m.h"
 
 Define_Module(Node);
+
+void Node::addParity (CustomMessage_Base* msg){
+    std::string payload = msg->getPayload();
+    std::bitset<8> result(0);
+    for (int i = 0; i<payload.size();i++){
+        std::bitset<8> b(payload[i]);
+        result = result ^ b;
+    }
+    char resChar = (char)result.to_ulong();
+    msg ->setTrailer(resChar);
+}
+
+bool Node::checkParity (CustomMessage_Base* msg){
+    std::string payload = msg->getPayload();
+    std::bitset<8> result(0);
+    for (int i = 0; i<payload.size();i++){
+        std::bitset<8> b(payload[i]);
+        result = result ^ b;
+    }
+    std::bitset<8> parity(msg -> getTrailer());
+    result = result ^ parity;
+    return !result.all();
+}
 
 void Node::initialize()
 {
     // TODO - Generated method body
 }
 
-void Node::getCurrentNodeState(cMessage *msg)
+void Node::getCurrentNodeState(CustomMessage_Base *msg)
 {
     // Check if the received message came from coordinator or the another node
     // The coordinator is connected to input gate 0 of each node (According to package.ned file)
@@ -30,46 +54,57 @@ void Node::getCurrentNodeState(cMessage *msg)
     {
         EV << "Node 0 will act as sender.." << endl;
         EV << "Node 1 will act as receiver.." << endl;
-        EV << "Node 0 will start after: " << msg->getName() << endl;
-        double startTime = double(std::stod(msg->getName()));
-        scheduleAt(simTime() + startTime, new cMessage(""));
+//        EV << "Node 0 will start after: " << msg->getName() << endl;
+        EV << "Node 0 will start after: " << msg->getPayload() << endl;
+        double startTime = double(std::stod(msg->getPayload()));
+//        scheduleAt(simTime() + startTime, new cMessage(""));
+        scheduleAt(simTime() + startTime, new CustomMessage_Base(""));
+
     }
     else
     {
-        // Handle sender or receiver case
-        if (strcmp(msg->getName(), "ACK" )== 0)
+        // if the frame type is ACK
+        if (msg->getFrameType() == 1)
         {
 
         }
-        else if (strcmp(msg->getName(), "NACK") == 0)
+        // if the frame type is NACK
+        else if (msg->getFrameType() == 2)
         {
-            // Will be ignored (see classroom)
+                    // Will be ignored (see classroom)
         }
-        else {
+        else
+        {
               // This node acts as receiver
               // Remove escape characters from the payload
-              std::string receivedmsg = msg->getName();
-              std::vector<char> msgWithoutEsc ;
-              bool isPrevEsc = false;
-              for (int i=1 ; i< receivedmsg.size()-1 ; i++)
-              {
-                  if (isPrevEsc)
-                  {
-                      msgWithoutEsc.push_back(receivedmsg[i]);
-                      isPrevEsc = false ;
-                      continue;
-                  }
-                  else if (!isPrevEsc && receivedmsg[i]==ESCAPE)
-                  {
-                      isPrevEsc = true;
-                      continue;
-                  }
-                  msgWithoutEsc.push_back(receivedmsg[i]);
+//              std::string receivedmsg = msg->getName();
+              std::string receivedMsg = msg->getPayload();
 
+              bool isNotCorrupt = checkParity(msg);
+              EV << "Parity Check: "<< isNotCorrupt << endl;
+              if(isNotCorrupt){
+                  std::vector<char> msgWithoutEsc ;
+                  bool isPrevEsc = false;
+                  for (int i=1 ; i< receivedMsg.size()-1 ; i++)
+                  {
+                      if (isPrevEsc)
+                      {
+                          msgWithoutEsc.push_back(receivedMsg[i]);
+                          isPrevEsc = false ;
+                          continue;
+                      }
+                      else if (!isPrevEsc && receivedMsg[i]==ESCAPE)
+                      {
+                          isPrevEsc = true;
+                          continue;
+                      }
+                      msgWithoutEsc.push_back(receivedMsg[i]);
+
+                  }
+                  // Convert vector back to string
+                  std::string msgWithoutEscStr(msgWithoutEsc.begin(), msgWithoutEsc.end());
+                  EV << "Received after removing escape characters: "<< msgWithoutEscStr << endl;
               }
-              // Convert vector back to string
-              std::string msgWithoutEscStr(msgWithoutEsc.begin(), msgWithoutEsc.end());
-              EV << "Received after removing escape characters: "<< msgWithoutEscStr << endl;
         }
     }
 }
@@ -77,12 +112,15 @@ void Node::getCurrentNodeState(cMessage *msg)
 
 void Node::handleMessage(cMessage *msg)
 {
+    CustomMessage_Base* mmsg = check_and_cast<CustomMessage_Base*>(msg);
     std::vector<char> stuffedmsg;
-    if (msg->isSelfMessage())
+    if (mmsg->isSelfMessage())
     {
         EV << "Node 0 Started ..." << endl;
         // Handle flag and escape characters in the payload
         // And add the flag to the start and end of the message
+
+        // working with a vector
         stuffedmsg.push_back(FLAG);
         for (int i = 0; i < message.size(); i++)
         {
@@ -96,20 +134,23 @@ void Node::handleMessage(cMessage *msg)
                 stuffedmsg.push_back(message[i]);
             }
         }
+
         stuffedmsg.push_back(FLAG);
         // Convert the vector to string
         std::string stuffedstr(stuffedmsg.begin(), stuffedmsg.end());
-        // Print the msg to console
-        EV<< stuffedstr << endl;
-        msg->setName(stuffedstr.c_str());
-        msg->setKind(1);
-        send(msg,"out");
-    }
-    else if (std::strcmp(msg->getName(), "ACK") == 0) {
+        mmsg -> setPayload(stuffedstr.c_str());
 
+        addParity(mmsg);
+
+        // Print the msg to console
+        EV<< mmsg -> getPayload() << endl;
+//        msg->setName(stuffedstr.c_str());
+        EV<< mmsg -> getTrailer() << endl;
+        mmsg->setKind(1);
+        send(mmsg,"out");
     }
     else
     {
-        getCurrentNodeState(msg);
+        getCurrentNodeState(mmsg);
     }
 }
