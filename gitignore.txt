@@ -1,0 +1,11 @@
+out
+results
+*.exe
+.*
+!.nedexclusions
+!.nedfolders
+!.gitignore
+!.oppbuildspec
+!.cproject
+!.project
+!.settings
