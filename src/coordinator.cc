@@ -24,7 +24,7 @@ void Coordinator::initialize()
     // TEMP (Data should be read from a file)
     // Send a message to the first node with its starting time
     double startTime = exponential(1/0.4);
-//    cMessage *msg = new cMessage(std::to_string(startTime).c_str(),0);
+    // Set kind to 0 to indicate that message came from coordinator
     CustomMessage_Base* msg = new CustomMessage_Base("starting time",0);
     msg -> setPayload(std::to_string(startTime).c_str());
     send(msg, "out", 0);

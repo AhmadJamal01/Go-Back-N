@@ -28,7 +28,7 @@ class Node : public cSimpleModule
 {
   protected:
     // TEMP (Should be read from file)
-    std::string message = "Kak$ka/k";
+    std::string MESSAGE = "Kak$ka/k";
     // Byte stuffing constants
     char FLAG = '$';
     char ESCAPE = '/';
@@ -37,6 +37,7 @@ class Node : public cSimpleModule
     void getCurrentNodeState(CustomMessage_Base *msg);
     void addParity (CustomMessage_Base* msg);
     bool checkParity (CustomMessage_Base* msg);
+    std::string byteStuffing(std::string message);
 };
 
 #endif
