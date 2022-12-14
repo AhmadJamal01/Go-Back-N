@@ -66,100 +66,171 @@ std::string Node::byteStuffing(std::string message)
      return stuffedstr;
 }
 
-void Node::initialize()
-{
-    // TODO - Generated method body
+float Node::msgDelay(std::string command){//-1 dont send
+    float totalDelay = TD;
+    if(command[1]=='0' && command[3]=='1'){
+        totalDelay+=ED;
+    }
+    else if(command[1]=='0' && command[3]=='0'){
+        totalDelay+=0;
+    }
+    else{
+        totalDelay=-1;
+    }
+    return totalDelay;
 }
 
-void Node::getCurrentNodeState(CustomMessage_Base *msg)
-{
-    // Check if the received message came from coordinator or the another node
-    // The message from coordinator will have kind = 0
-    if (msg->getKind() == 0)
-    {
+float Node::msgDubDelay(std::string command){//-1 dont send
+    float totalDelay = TD + DD;
+    if(command[1]=='0' && command[3]=='1' && command[2]=='1'){
+        totalDelay+=ED;
+    }
+    else if(command[1]=='0' && command[3]=='0' && command[2]=='1'){
+        totalDelay+=0;
+    }
+    else{
+        totalDelay=-1;
+    }
+    return totalDelay;
+}
+
+float Node::processDelay(){
+    return PT;
+}
+
+float Node::timeOutDelay(){
+    return TO;
+}
+
+bool Node::isLost(){
+    //randomly return true with probability LP (with precision of 2 decimal places)
+    return (rand()%100 < int(LP*100));
+}
+
+//______________________________________________________________________________________________
+void Node::initialize(){
+}
+
+void Node::handleMessage(cMessage *msg){
+    //Drop the message if the node is still processing the previous message
+    if (EndProcessingTimeStamp > simTime()){
+        return;
+    }
+
+    EndProcessingTimeStamp = simTime() + processDelay();
+    CustomMessage_Base* RecivedMsg = check_and_cast<CustomMessage_Base*>(msg);
+    int ReceivedSeqNum = RecivedMsg->getAckNumber();
+
+    // Msg from the coordinator to Sender initializing the communication (non self message, kind = 0)
+    if (!RecivedMsg->isSelfMessage() && RecivedMsg->getKind() == 0){
         EV << "Node "<< getIndex() <<" will act as sender.." << endl;
         EV << "Node "<< 1-getIndex() <<" will act as receiver.." << endl;
-        EV << "Node "<< getIndex() <<" will start after: " << msg->getPayload() << endl;
-        double startTime = double(std::stod(msg->getPayload()));
-        // Send a self message to start the node after the specified time
-        scheduleAt(simTime() + startTime, new CustomMessage_Base(""));
+        EV << "Node "<< getIndex() <<" will start after: " << RecivedMsg->getPayload() << endl;
+        double startTime = double(std::stod(RecivedMsg->getPayload()));
+
+        std::string command = "0000";//TODO: MESSAGE = getCOMMANDFromLineString(line);
+        std::string payload = "Kak$ka/k";//TODO: MESSAGE = getMsgFromLineString(line);
+        msgBuffer.payload = payload;
+        msgBuffer.command = command;
+
+        scheduleAt(simTime() + startTime + processDelay(), new CustomMessage_Base(""));//The the processing time here is of the next message (not the current one)
     }
-    else
-    {
-        // if the frame type is ACK
-        if (msg->getFrameType() == 1)
-        {
 
-        }
-        // if the frame type is NACK
-        else if (msg->getFrameType() == 2)
-        {
-             // Will be ignored (see classroom)
-        }
-        else
-        {
-              // This node acts as receiver
-              // Remove escape characters from the payload
-              std::string receivedMsg = msg->getPayload();
-              // Check the parity
-              bool isNotCorrupt = checkParity(msg);
-              EV << "Parity Check: "<< isNotCorrupt << endl;
-              // If the message is not corrupt remove the escape characters
-              if(isNotCorrupt){
-                  std::vector<char> msgWithoutEsc ;
-                  bool isPrevEsc = false;
-                  for (int i=1 ; i< receivedMsg.size()-1 ; i++)
-                  {
-                      if (isPrevEsc)
-                      {
-                          msgWithoutEsc.push_back(receivedMsg[i]);
-                          isPrevEsc = false ;
-                          continue;
-                      }
-                      else if (!isPrevEsc && receivedMsg[i]==ESCAPE)
-                      {
-                          isPrevEsc = true;
-                          continue;
-                      }
-                      msgWithoutEsc.push_back(receivedMsg[i]);
-
-                  }
-                  // Convert vector back to string
-                  std::string msgWithoutEscStr(msgWithoutEsc.begin(), msgWithoutEsc.end());
-                  EV << "Received after removing escape characters: "<< msgWithoutEscStr << endl;
-
-                  // TODO:: Send ACK
-              }
-              // TODO:: Send NACK
-
-        }
-    }
-}
-
-
-void Node::handleMessage(cMessage *msg)
-{
-    // Upcasting
-    CustomMessage_Base* mmsg = check_and_cast<CustomMessage_Base*>(msg);
-    if (mmsg->isSelfMessage())
-    {
+    // Sender ready to send a new message (self message, kind = 0)
+    else if (RecivedMsg->isSelfMessage() && RecivedMsg->getKind()==0){
+        CustomMessage_Base *msgToSend = new CustomMessage_Base("");
         EV << "Node " << getIndex() <<" Started ..." << endl;
+        // Calculate the delay
+        float delay = msgDelay(msgBuffer.command);
+        float dubDelay = msgDubDelay(msgBuffer.command);
         // Apply Framing
-        std::string stuffedstr = byteStuffing(MESSAGE);
+        std::string stuffedstr = byteStuffing(msgBuffer.payload);
         // Set the payload with the stuffed message
-        mmsg -> setPayload(stuffedstr.c_str());
+        msgToSend -> setPayload(stuffedstr.c_str());
         // Add parity
-        addParity(mmsg);
+        addParity(msgToSend);
+        // TODO: Apply error if needed
         // Print the msg to console
-        EV<< "Node " << getIndex() << " sent " <<mmsg -> getPayload() << endl;
-        EV<< mmsg -> getTrailer() << endl;
+        EV << "Node " << getIndex() << " sent " << msgToSend -> getPayload() << endl;
+        EV << msgToSend -> getTrailer() << endl;
         // Set the kind to 1 to differentiate between the coordinator (Kind 0) and the other nodes
-        mmsg->setKind(1);
-        send(mmsg,"out");
+        msgToSend->setKind(1);// (non self message, kind = 1)
+        msgToSend->setAckNumber(expectedseqNum);
+        expectedseqNum = (expectedseqNum+1)%2;
+        if (delay != -1){
+            // Send the message to the other node if no loss
+            sendDelayed(msgToSend, delay, "out");
+        }
+        if (dubDelay != -1){
+            // Send the duplicated message to the other node if exists and no loss
+            CustomMessage_Base* msgDub = msgToSend -> dup();
+            sendDelayed(msgDub, dubDelay, "out");
+        }
+        scheduleAt(simTime() + timeOutDelay(), new CustomMessage_Base("", 1));//The timeout for the message (self message, kind = 1)
     }
-    else
-    {
-        // Handle if the received message is a self message or Coordinator message or a message from another node
-        getCurrentNodeState(mmsg);
+
+    // Sender Timer Timeout (self message, kind = 1)
+    else if (RecivedMsg->isSelfMessage() && RecivedMsg->getKind()==1){
+        //No new line is read, so the same message is sent again
+        scheduleAt(EndProcessingTimeStamp, new CustomMessage_Base("", 0));//the processing time for the next message (self message, kind = 0)
+    }
+
+    // Sender receives correct ACK (non self message, kind = 2)
+    else if (RecivedMsg->getKind() == 2 && ReceivedSeqNum==expectedseqNum){//Sender receives ACK subroutine
+        // Read the next line from the file
+        std::string command = "0000";//TODO: MESSAGE = getCOMMANDFromLineString(line);
+        std::string payload = "saad";//TODO: MESSAGE = getMsgFromLineString(line);
+        msgBuffer.payload = payload;
+        msgBuffer.command = command;
+        EV<<"AT time "<<simTime()<<"Node"<<getIndex()<<", Introducing channel error with code"<<msgBuffer.command<<endl;
+        scheduleAt(EndProcessingTimeStamp, new CustomMessage_Base("", 0));//the processing time for the next message (self message, kind = 0)
+    }
+
+    // Sender receives NACK (non self message, kind = 3)
+    else if (RecivedMsg->getKind() == 3){//Sender receives NACK subroutine
+    }
+
+    // Receiver ready to receive a new message (non self message, kind = 1)
+    else if (RecivedMsg->getKind() == 1){
+        // Remove escape characters from the payload
+        std::string receivedMsg = RecivedMsg->getPayload();
+        // Check the parity
+        bool isNotCorrupt = checkParity(RecivedMsg);
+        EV << "Parity Check: "<< isNotCorrupt << endl;
+        // If the message is not corrupt remove the escape characters
+        if(isNotCorrupt){
+            std::vector<char> msgWithoutEsc;
+            bool isPrevEsc = false;
+            for (int i=1 ; i< receivedMsg.size()-1 ; i++){
+                if (isPrevEsc){
+                    msgWithoutEsc.push_back(receivedMsg[i]);
+                    isPrevEsc = false ;
+                    continue;
+                }
+                else if (!isPrevEsc && receivedMsg[i]==ESCAPE){
+                    isPrevEsc = true;
+                    continue;
+                }
+                msgWithoutEsc.push_back(receivedMsg[i]);
+            }
+            // Convert vector back to string
+            std::string msgWithoutEscStr(msgWithoutEsc.begin(), msgWithoutEsc.end());
+            EV << "Received after removing escape characters: "<< msgWithoutEscStr << endl;
+            //Send ACK with kind 2
+            if (!isLost()){//Send ACK
+                CustomMessage_Base* ackmsg = new CustomMessage_Base("");
+                expectedseqNum = (expectedseqNum+1)%2; //because the sender wants the next message with the next seqNum
+                ackmsg->setAckNumber(expectedseqNum);
+                ackmsg->setKind(2);
+                sendDelayed(ackmsg, PT+TD, "out");
+            }
+        }
+        else{//Send ACK with kind 3
+            CustomMessage_Base* nackmsg = new CustomMessage_Base("");
+            expectedseqNum = (expectedseqNum+1)%2; //because the sender wants the next message with the next seqNum
+            nackmsg->setAckNumber(expectedseqNum);
+            nackmsg->setKind(3);
+            sendDelayed(nackmsg, PT+TD, "out");
+        }
     }
 }

@@ -24,11 +24,13 @@ using namespace omnetpp;
 /**
  * TODO - Generated class
  */
+struct msgWithCommand{
+  std::string payload="";
+  std::string command="";
+};
 class Node : public cSimpleModule
 {
   protected:
-    // TEMP (Should be read from file)
-    std::string MESSAGE = "Kak$ka/k";
     // Byte stuffing constants
     char FLAG = '$';
     char ESCAPE = '/';
@@ -38,6 +40,20 @@ class Node : public cSimpleModule
     void addParity (CustomMessage_Base* msg);
     bool checkParity (CustomMessage_Base* msg);
     std::string byteStuffing(std::string message);
+    int WS = 5;
+    float TO =  10;
+    float PT = 0.5;
+    float TD = 1.0;
+    float ED = 4.0;
+    float DD = 0.1;
+    float LP = 0.1;
+    omnetpp::SimTime EndProcessingTimeStamp=simTime();//drop the message if the node is still processing
+    float msgDelay(std::string command);//-1 don't send loss
+    float msgDubDelay(std::string command);//-1 don't send loss or no delay
+    float processDelay();//just return PT
+    float timeOutDelay();//just return TO
+    bool isLost();//return true if ACK or NACK is lost for receiver
+    int expectedseqNum = 0;
+    msgWithCommand msgBuffer;
 };
-
 #endif
