@@ -145,15 +145,25 @@ void Node::handleMessage(cMessage *msg){
         EV << "Node "<< 1-getIndex() <<" will act as receiver.." << endl;
         EV << "Node "<< getIndex() <<" will start after: " << RecivedMsg->getPayload() << endl;
         double startTime = double(std::stod(RecivedMsg->getPayload()));
-        infile=fopen("D:/omnetpp/omnetpp-5.6.2/samples/Networks-Project/src/input0.txt", "r");
+        
+        char filePath[2048];
+        strcpy(filePath, "../src/input");
+        strcat(filePath, std::to_string(getIndex()).c_str());
+        strcat(filePath, ".txt");
+        infile=fopen(filePath, "r");
         std::string line="";
         char buffer[2];
         while (fgets(buffer, sizeof(buffer), infile) != NULL) {
             if (buffer[0] == '\n') break;
             line += buffer;
         }
+        if (line == ""){
+            EV << "Sender"<<" finished sending" << endl;
+            return;
+        }
         std::string command = line.substr(0, line.find(" "));
         std::string payload = line.substr(line.find(" ")+1);
+
         msgBuffer.payload = payload;
         msgBuffer.command = command;
 
@@ -162,9 +172,9 @@ void Node::handleMessage(cMessage *msg){
 
     // Sender ready to send a new message (self message, kind = 0)
     else if (RecivedMsg->isSelfMessage() && RecivedMsg->getKind()==0){
-        EV << "Sender" << " sending payload("<< msgBuffer.payload <<")" << endl;
-        EV << "Sender" << " using command("<< msgBuffer.command <<")" << endl;
         EV << "Sender" << " current seqNum("<<expectedseqNum<<")"<<endl;
+        EV << "Sender" << " using command("<< msgBuffer.command <<")" << endl;
+        EV << "Sender" << " sending payload("<< msgBuffer.payload <<")" << endl;
 
         CustomMessage_Base *msgToSend = new CustomMessage_Base("");
         // Calculate the delay
@@ -212,21 +222,27 @@ void Node::handleMessage(cMessage *msg){
     // Sender receives correct ACK (non self message, kind = 2)
     else if (RecivedMsg->getKind() == 2 && ReceivedSeqNum==expectedseqNum){//Sender receives ACK subroutine
         EV << "Sender"<<" received ACK" << endl;
-        // Read the next line from the file
+
+        if (timeoutMsgPtr != nullptr){
+            cancelAndDelete(timeoutMsgPtr);
+            timeoutMsgPtr = nullptr;
+        }
+
         std::string line="";
         char buffer[2];
         while (fgets(buffer, sizeof(buffer), infile) != NULL) {
             if (buffer[0] == '\n') break;
             line += buffer;
         }
+        if (line == ""){
+            EV << "Sender"<<" finished sending" << endl;
+            return;
+        }
         std::string command = line.substr(0, line.find(" "));
         std::string payload = line.substr(line.find(" ")+1);
         msgBuffer.payload = payload;
         msgBuffer.command = command;
-        if (timeoutMsgPtr != nullptr){
-            cancelAndDelete(timeoutMsgPtr);
-            timeoutMsgPtr = nullptr;
-        }
+
         scheduleAt(EndProcessingTimeStamp, new CustomMessage_Base("", 0));//the processing time for the next message (self message, kind = 0)
     }
 
@@ -239,7 +255,6 @@ void Node::handleMessage(cMessage *msg){
     else if (RecivedMsg->getKind() == 1){//Receiver receives message subroutine
         // Remove escape characters from the payload
         std::string receivedMsg = RecivedMsg->getPayload();
-        EV << "Receiver"<<" received payload("<< receivedMsg <<")" << endl;
         // Check the parity
         bool isNotCorrupt = checkParity(RecivedMsg);
         
@@ -248,8 +263,9 @@ void Node::handleMessage(cMessage *msg){
             EV << "Receiver"<<" received message is not corrupt" << endl;
             EV << "Receiver" << " current seqNum("<<ReceivedSeqNum<<")"<<endl;
             EV << "Receiver" << " expected seqNum("<<expectedseqNum<<")"<<endl;
+            EV << "Receiver"<<" received payload("<< receivedMsg <<")" << endl;
             EV << "Receiver" << " delay("<<PT+TD<<")"<<endl;
-            if(ReceivedSeqNum == expectedseqNum){//If the message is the expected one increment the expected seqNum
+            if(ReceivedSeqNum == expectedseqNum){//If the message seq num is the expected one increment the expected seqNum
                 expectedseqNum = incrementSeqNum(expectedseqNum);//because the sender wants the next message with the next seqNum
             }
             std::vector<char> msgWithoutEsc;
@@ -268,7 +284,7 @@ void Node::handleMessage(cMessage *msg){
             }
             // Convert vector back to string
             std::string msgWithoutEscStr(msgWithoutEsc.begin(), msgWithoutEsc.end());
-            //Send ACK with kind 2
+            // Send ACK (non self message, kind = 2)
             if (!isLost()){//Send ACK
                 CustomMessage_Base* ackmsg = new CustomMessage_Base("");
                 ackmsg->setAckNumber(expectedseqNum);
@@ -276,7 +292,8 @@ void Node::handleMessage(cMessage *msg){
                 sendDelayed(ackmsg, PT+TD, "out");
             }
         }
-        else{//Send ACK with kind 3
+        // Send NACK (non self message, kind = 3)
+        else{
             EV << "Receiver"<<" received message is corrupt" << endl;
             CustomMessage_Base* nackmsg = new CustomMessage_Base("");
             nackmsg->setAckNumber(expectedseqNum);
