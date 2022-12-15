@@ -41,19 +41,21 @@ class Node : public cSimpleModule
     bool checkParity (CustomMessage_Base* msg);
     std::string byteStuffing(std::string message);
     int WS = 5;
-    float TO =  10;
-    float PT = 0.5;
-    float TD = 1.0;
-    float ED = 4.0;
-    float DD = 0.1;
-    float LP = 0.1;
+    double TO = 10.0;
+    double PT = 0.5;
+    double TD = 1.0;
+    double ED = 4.0;
+    double DD = 0.1;
+    double LP = 0.1;
     omnetpp::SimTime EndProcessingTimeStamp=simTime();//drop the message if the node is still processing
     float msgDelay(std::string command);//-1 don't send loss
     float msgDubDelay(std::string command);//-1 don't send loss or no delay
     float processDelay();//just return PT
     float timeOutDelay();//just return TO
     bool isLost();//return true if ACK or NACK is lost for receiver
+    CustomMessage_Base *timeoutMsgPtr = nullptr;
     int expectedseqNum = 0;
     msgWithCommand msgBuffer;
+    FILE *infile;
 };
 #endif

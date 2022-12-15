@@ -15,7 +15,6 @@
 
 #include "node.h"
 #include "CustomMessage_m.h"
-
 Define_Module(Node);
 
 void Node::addParity (CustomMessage_Base* msg){
@@ -67,7 +66,7 @@ std::string Node::byteStuffing(std::string message)
 }
 
 float Node::msgDelay(std::string command){//-1 dont send
-    float totalDelay = TD;
+    float totalDelay = PT + TD;
     if(command[1]=='0' && command[3]=='1'){
         totalDelay+=ED;
     }
@@ -81,11 +80,11 @@ float Node::msgDelay(std::string command){//-1 dont send
 }
 
 float Node::msgDubDelay(std::string command){//-1 dont send
-    float totalDelay = TD + DD;
-    if(command[1]=='0' && command[3]=='1' && command[2]=='1'){
+    float totalDelay = PT + TD + DD;
+    if(command[1]=='0' && command[2]=='1' && command[3]=='1'){
         totalDelay+=ED;
     }
-    else if(command[1]=='0' && command[3]=='0' && command[2]=='1'){
+    else if(command[1]=='0' && command[2]=='1' && command[3]=='0'){
         totalDelay+=0;
     }
     else{
@@ -106,14 +105,33 @@ bool Node::isLost(){
     //randomly return true with probability LP (with precision of 2 decimal places)
     return (rand()%100 < int(LP*100));
 }
-
+int incrementSeqNum(int seqNum){
+    int temp = (seqNum+1)%2;
+    return temp;
+}
+int decrementSeqNum(int seqNum){
+    int temp = (seqNum-1)%2;
+    if(temp < 0){
+        temp = 1;
+    }
+    return temp;
+}
 //______________________________________________________________________________________________
 void Node::initialize(){
+    WS = par("WS");
+    TO = par("TO");
+    PT = par("PT");
+    TD = par("TD");
+    ED = par("ED");
+    DD = par("DD");
+    LP = par("LP");
+    EV<<"WS: "<<WS<<", TO: "<<TO<<", PT: "<<PT<<", TD: "<<TD<<", ED: "<<ED<<", DD: "<<DD<<", LP: "<<LP<<endl;
 }
 
 void Node::handleMessage(cMessage *msg){
     //Drop the message if the node is still processing the previous message
     if (EndProcessingTimeStamp > simTime()){
+        EV <<"A message has been dropped" << endl;
         return;
     }
 
@@ -121,15 +139,21 @@ void Node::handleMessage(cMessage *msg){
     CustomMessage_Base* RecivedMsg = check_and_cast<CustomMessage_Base*>(msg);
     int ReceivedSeqNum = RecivedMsg->getAckNumber();
 
-    // Msg from the coordinator to Sender initializing the communication (non self message, kind = 0)
+    // Msg from the coordinator to Sender for initializing the communication (non self message, kind = 0)
     if (!RecivedMsg->isSelfMessage() && RecivedMsg->getKind() == 0){
         EV << "Node "<< getIndex() <<" will act as sender.." << endl;
         EV << "Node "<< 1-getIndex() <<" will act as receiver.." << endl;
         EV << "Node "<< getIndex() <<" will start after: " << RecivedMsg->getPayload() << endl;
         double startTime = double(std::stod(RecivedMsg->getPayload()));
-
-        std::string command = "0000";//TODO: MESSAGE = getCOMMANDFromLineString(line);
-        std::string payload = "Kak$ka/k";//TODO: MESSAGE = getMsgFromLineString(line);
+        infile=fopen("D:/omnetpp/omnetpp-5.6.2/samples/Networks-Project/src/input0.txt", "r");
+        std::string line="";
+        char buffer[2];
+        while (fgets(buffer, sizeof(buffer), infile) != NULL) {
+            if (buffer[0] == '\n') break;
+            line += buffer;
+        }
+        std::string command = line.substr(0, line.find(" "));
+        std::string payload = line.substr(line.find(" ")+1);
         msgBuffer.payload = payload;
         msgBuffer.command = command;
 
@@ -138,11 +162,19 @@ void Node::handleMessage(cMessage *msg){
 
     // Sender ready to send a new message (self message, kind = 0)
     else if (RecivedMsg->isSelfMessage() && RecivedMsg->getKind()==0){
+        EV << "Sender" << " sending payload("<< msgBuffer.payload <<")" << endl;
+        EV << "Sender" << " using command("<< msgBuffer.command <<")" << endl;
+        EV << "Sender" << " current seqNum("<<expectedseqNum<<")"<<endl;
+
         CustomMessage_Base *msgToSend = new CustomMessage_Base("");
-        EV << "Node " << getIndex() <<" Started ..." << endl;
         // Calculate the delay
         float delay = msgDelay(msgBuffer.command);
         float dubDelay = msgDubDelay(msgBuffer.command);
+
+        EV << "Sender" << " delay("<< delay <<")" << endl;
+        EV << "Sender" << " dubDelay("<< dubDelay <<")" << endl;
+        EV << "Sender" << " time out delay("<<timeOutDelay()<<")"<<endl;
+
         // Apply Framing
         std::string stuffedstr = byteStuffing(msgBuffer.payload);
         // Set the payload with the stuffed message
@@ -151,12 +183,10 @@ void Node::handleMessage(cMessage *msg){
         addParity(msgToSend);
         // TODO: Apply error if needed
         // Print the msg to console
-        EV << "Node " << getIndex() << " sent " << msgToSend -> getPayload() << endl;
-        EV << msgToSend -> getTrailer() << endl;
         // Set the kind to 1 to differentiate between the coordinator (Kind 0) and the other nodes
         msgToSend->setKind(1);// (non self message, kind = 1)
         msgToSend->setAckNumber(expectedseqNum);
-        expectedseqNum = (expectedseqNum+1)%2;
+        expectedseqNum = incrementSeqNum(expectedseqNum);
         if (delay != -1){
             // Send the message to the other node if no loss
             sendDelayed(msgToSend, delay, "out");
@@ -166,39 +196,62 @@ void Node::handleMessage(cMessage *msg){
             CustomMessage_Base* msgDub = msgToSend -> dup();
             sendDelayed(msgDub, dubDelay, "out");
         }
-        scheduleAt(simTime() + timeOutDelay(), new CustomMessage_Base("", 1));//The timeout for the message (self message, kind = 1)
+
+        timeoutMsgPtr = new CustomMessage_Base("", 1);
+        scheduleAt(simTime() + timeOutDelay(), timeoutMsgPtr);//The timeout for the message (self message, kind = 1)
     }
 
     // Sender Timer Timeout (self message, kind = 1)
     else if (RecivedMsg->isSelfMessage() && RecivedMsg->getKind()==1){
+        EV << "Sender"<<" timeout has happend" << endl;
+        expectedseqNum = decrementSeqNum(expectedseqNum);
         //No new line is read, so the same message is sent again
         scheduleAt(EndProcessingTimeStamp, new CustomMessage_Base("", 0));//the processing time for the next message (self message, kind = 0)
     }
 
     // Sender receives correct ACK (non self message, kind = 2)
     else if (RecivedMsg->getKind() == 2 && ReceivedSeqNum==expectedseqNum){//Sender receives ACK subroutine
+        EV << "Sender"<<" received ACK" << endl;
         // Read the next line from the file
-        std::string command = "0000";//TODO: MESSAGE = getCOMMANDFromLineString(line);
-        std::string payload = "saad";//TODO: MESSAGE = getMsgFromLineString(line);
+        std::string line="";
+        char buffer[2];
+        while (fgets(buffer, sizeof(buffer), infile) != NULL) {
+            if (buffer[0] == '\n') break;
+            line += buffer;
+        }
+        std::string command = line.substr(0, line.find(" "));
+        std::string payload = line.substr(line.find(" ")+1);
         msgBuffer.payload = payload;
         msgBuffer.command = command;
-        EV<<"AT time "<<simTime()<<"Node"<<getIndex()<<", Introducing channel error with code"<<msgBuffer.command<<endl;
+        if (timeoutMsgPtr != nullptr){
+            cancelAndDelete(timeoutMsgPtr);
+            timeoutMsgPtr = nullptr;
+        }
         scheduleAt(EndProcessingTimeStamp, new CustomMessage_Base("", 0));//the processing time for the next message (self message, kind = 0)
     }
 
     // Sender receives NACK (non self message, kind = 3)
     else if (RecivedMsg->getKind() == 3){//Sender receives NACK subroutine
+        EV << "Sender"<<" received NACK" << endl;
     }
 
     // Receiver ready to receive a new message (non self message, kind = 1)
-    else if (RecivedMsg->getKind() == 1){
+    else if (RecivedMsg->getKind() == 1){//Receiver receives message subroutine
         // Remove escape characters from the payload
         std::string receivedMsg = RecivedMsg->getPayload();
+        EV << "Receiver"<<" received payload("<< receivedMsg <<")" << endl;
         // Check the parity
         bool isNotCorrupt = checkParity(RecivedMsg);
-        EV << "Parity Check: "<< isNotCorrupt << endl;
+        
         // If the message is not corrupt remove the escape characters
         if(isNotCorrupt){
+            EV << "Receiver"<<" received message is not corrupt" << endl;
+            EV << "Receiver" << " current seqNum("<<ReceivedSeqNum<<")"<<endl;
+            EV << "Receiver" << " expected seqNum("<<expectedseqNum<<")"<<endl;
+            EV << "Receiver" << " delay("<<PT+TD<<")"<<endl;
+            if(ReceivedSeqNum == expectedseqNum){//If the message is the expected one increment the expected seqNum
+                expectedseqNum = incrementSeqNum(expectedseqNum);//because the sender wants the next message with the next seqNum
+            }
             std::vector<char> msgWithoutEsc;
             bool isPrevEsc = false;
             for (int i=1 ; i< receivedMsg.size()-1 ; i++){
@@ -215,19 +268,17 @@ void Node::handleMessage(cMessage *msg){
             }
             // Convert vector back to string
             std::string msgWithoutEscStr(msgWithoutEsc.begin(), msgWithoutEsc.end());
-            EV << "Received after removing escape characters: "<< msgWithoutEscStr << endl;
             //Send ACK with kind 2
             if (!isLost()){//Send ACK
                 CustomMessage_Base* ackmsg = new CustomMessage_Base("");
-                expectedseqNum = (expectedseqNum+1)%2; //because the sender wants the next message with the next seqNum
                 ackmsg->setAckNumber(expectedseqNum);
                 ackmsg->setKind(2);
                 sendDelayed(ackmsg, PT+TD, "out");
             }
         }
         else{//Send ACK with kind 3
+            EV << "Receiver"<<" received message is corrupt" << endl;
             CustomMessage_Base* nackmsg = new CustomMessage_Base("");
-            expectedseqNum = (expectedseqNum+1)%2; //because the sender wants the next message with the next seqNum
             nackmsg->setAckNumber(expectedseqNum);
             nackmsg->setKind(3);
             sendDelayed(nackmsg, PT+TD, "out");
