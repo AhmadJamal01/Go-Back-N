@@ -15,7 +15,7 @@
 
 #include "coordinator.h"
 #include "CustomMessage_m.h"
-
+#include <regex>
 
 Define_Module(Coordinator);
 
@@ -23,10 +23,23 @@ void Coordinator::initialize()
 {
     // TEMP (Data should be read from a file)
     // Send a message to the first node with its starting time
-    //TODO: read startTime from file
-    double startTime = 1;
-    //TODO: read index of sender from file
-    int index = 0;
+    FILE *infile;
+    char filePath[2048];
+    strcpy(filePath, "../src/coordinator.txt");
+    infile=fopen(filePath, "r");
+    char buffer[2];
+    std::string line="";
+    while (fgets(buffer, sizeof(buffer), infile) != NULL) {
+        if (buffer[0] == '\n') break;
+        line += buffer;
+    }
+    EV << line << endl;
+    // Regex to get the starting time and node id (index)
+    std::regex re("([0-9]),\\s*([[0-9]+(?:\\.[0-9])?)");
+    std::smatch match;
+    std::regex_search(line, match, re);
+    int index = std::stod(match[1]);
+    double startTime = std::stod(match[2]);
     // Set kind to 0 to indicate that message came from coordinator
     CustomMessage_Base* msg = new CustomMessage_Base("starting time", 0);
     msg -> setPayload(std::to_string(startTime).c_str());
@@ -35,5 +48,4 @@ void Coordinator::initialize()
 
 void Coordinator::handleMessage(cMessage *msg)
 {
-    // TODO - Generated method body
 }

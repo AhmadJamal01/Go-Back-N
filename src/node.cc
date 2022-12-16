@@ -73,7 +73,7 @@ std::string Node::byteStuffing(std::string message)
      return stuffedstr;
 }
 
-float Node::msgDelay(std::string command){//-1 dont send
+float Node::msgDelay(std::string command){//-1 == dont send (lost)
     float totalDelay = PT + TD;
     if(command[1]=='0' && command[3]=='1'){
         totalDelay+=ED;
@@ -87,7 +87,7 @@ float Node::msgDelay(std::string command){//-1 dont send
     return totalDelay;
 }
 
-float Node::msgDubDelay(std::string command){//-1 dont send
+float Node::msgDubDelay(std::string command){//-1 == dont send (lost)
     float totalDelay = PT + TD + DD;
     if(command[1]=='0' && command[2]=='1' && command[3]=='1'){
         totalDelay+=ED;
@@ -110,7 +110,7 @@ float Node::timeOutDelay(){
 }
 
 bool Node::isLost(){
-    //randomly return true with probability LP (with precision of 2 decimal places)
+    // Randomly return true with probability LP (with precision of 2 decimal places)
     return (rand()%100 < int(LP*100));
 }
 int Node::incrementSeqNum(int seqNum){
@@ -130,12 +130,12 @@ void Node::initialize(){
 }
 
 void Node::handleMessage(cMessage *msg){
-    //Drop the message if the node is still processing the previous message
-    if (EndProcessingTimeStamp > simTime()){
+    // Drop the message if the node is still processing the previous message
+    if (EndProcessingTime > simTime()){
         EV <<"A message has been dropped" << endl;
         return;
     }
-
+    // Get the data from the received frame (msg, seqNum)
     CustomMessage_Base* RecivedMsg = check_and_cast<CustomMessage_Base*>(msg);
     int ReceivedSeqNum = RecivedMsg->getAckNumber();
 
@@ -145,148 +145,140 @@ void Node::handleMessage(cMessage *msg){
         EV << "Node "<< 1-getIndex() <<" will act as receiver.." << endl;
         EV << "Node "<< getIndex() <<" will start after: " << RecivedMsg->getPayload() << endl;
         double startTime = double(std::stod(RecivedMsg->getPayload()));
-        
+        // Inti the file for reading the input
         char filePath[2048];
         strcpy(filePath, "../src/input");
         strcat(filePath, std::to_string(getIndex()).c_str());
         strcat(filePath, ".txt");
         infile=fopen(filePath, "r");
+        // Read the first WS messages from the file
         for (int i=0; i<WS; i++){
+            // Get the a line from the file
             std::string line="";
             char buffer[2];
             while (fgets(buffer, sizeof(buffer), infile) != NULL) {
                 if (buffer[0] == '\n') break;
                 line += buffer;
             }
+            // If the line is empty, break (no more messages to send)
             if (line == ""){
                 EV << "Sender"<<" No new Msg" << endl;
                 break;
             }
             std::string command = line.substr(0, line.find(" "));
             std::string payload = line.substr(line.find(" ") + 1);
-
             msgBuffer[i].command = command;
             msgBuffer[i].payload = payload;
             S_end= incrementSeqNum(S_end);
         }
-
+        // Send the first WS messages (a window)
         for(int i=0; i < S_end; i++){
-            FinalAckSent=i;
-            scheduleAt(simTime() + startTime + i * processDelay(), new CustomMessage_Base("", 0));//The the processing time here is of the next message (not the current one)
+            scheduleAt(simTime() + startTime + i * processDelay(), new CustomMessage_Base("", 0));// Schedule a message is (self message, kind = 0)
         }
     }
 
     // Sender ready to send a new message (self message, kind = 0)
     else if (RecivedMsg->isSelfMessage() && RecivedMsg->getKind()==0){
-        EndProcessingTimeStamp = simTime() + processDelay();
+        // Specify the time at wich the sender will be free
+        EndProcessingTime = simTime() + processDelay();
 
         EV << "Sender" << " current seqNum("<<S<<")"<<endl;
         EV << "Sender" << " using command("<< msgBuffer[S].command <<")" << endl;
         EV << "Sender" << " sending payload("<< msgBuffer[S].payload <<")" << endl;
-
+        // Prepare the message to send (delay calculation, add framing, add parity, add error)
         CustomMessage_Base *msgToSend = new CustomMessage_Base("");
-        // Calculate the delay
-        float delay = msgDelay(msgBuffer[S].command);
-        float dubDelay = msgDubDelay(msgBuffer[S].command);
+        
+        float delay = msgDelay(msgBuffer[S].command);// Calculate the delay of the message
+        float dubDelay = msgDubDelay(msgBuffer[S].command);// Calculate the delay of the dublicate message
 
         EV << "Sender" << " delay("<< delay <<")" << endl;
         EV << "Sender" << " dubDelay("<< dubDelay <<")" << endl;
         EV << "Sender" << " time out delay("<<timeOutDelay()<<")"<<endl;
 
-        // Apply Framing
-        std::string stuffedstr = byteStuffing(msgBuffer[S].payload);
-        // Set the payload with the stuffed message
-        msgToSend -> setPayload(stuffedstr.c_str());
-        // Add parity
-        addParity(msgToSend);
+        std::string stuffedstr = byteStuffing(msgBuffer[S].payload);// Apply Framing
+        msgToSend -> setPayload(stuffedstr.c_str());// Set the payload with the stuffed message
+        addParity(msgToSend);// Add parity
         // TODO: Apply error if needed
-        // Print the msg to console
-        // Set the kind to 1 to differentiate between the coordinator (Kind 0) and the other nodes
-        msgToSend->setKind(1);// (non self message, kind = 1)
+        msgToSend->setKind(1);// Send a message (non self message, kind = 1)
         msgToSend->setAckNumber(S);
         S = incrementSeqNum(S);
         if (delay != -1){
             // Send the message to the other node if no loss
             sendDelayed(msgToSend, delay, "out");
         }
+        else{
+            cancelAndDelete(msgToSend);// Delete the message if losst
+        }
         if (dubDelay != -1){
             // Send the duplicated message to the other node if exists and no loss
             CustomMessage_Base* msgDub = msgToSend -> dup();
             sendDelayed(msgDub, dubDelay, "out");
         }
-
-        if(S==S_end){
-            timeoutMsgPtr = new CustomMessage_Base("", 1);
-            scheduleAt(simTime() + timeOutDelay(), timeoutMsgPtr);//The timeout for the message (self message, kind = 1)
+        // Reschedule the timer (every new send)
+        if (timeoutMsgPtr!=nullptr){
+            cancelAndDelete(timeoutMsgPtr);
+            timeoutMsgPtr=nullptr;
         }
+        timeoutMsgPtr = new CustomMessage_Base("", 1);
+        scheduleAt(simTime() + timeOutDelay(), timeoutMsgPtr);//The timeout for the message (self message, kind = 1)
+        ackExpected = S;
     }
 
     // Sender Timer Timeout (self message, kind = 1)
     else if (RecivedMsg->isSelfMessage() && RecivedMsg->getKind()==1){
         EV << "Sender"<<" timeout has happend" << endl;
         S = S_start;
-        //No new line is read, so the same message is sent again
+        // Send the whole window
         for(int i = S_start; i < S_start + dist(S_start, S_end); i++){
-            FinalAckSent=i%(WS+1);
-            scheduleAt(simTime() + (i - S_start) * processDelay(), new CustomMessage_Base("", 0));//the processing time for the next message (self message, kind = 0)
+            scheduleAt(simTime() + (i - S_start) * processDelay(), new CustomMessage_Base("", 0));// Schedule a message is (self message, kind = 0)
         }
     }
 
-    // Sender receives correct ACK (non self message, kind = 2)
-    else if (RecivedMsg->getKind() == 2){//Sender receives ACK subroutine
+    // Sender receives correct ACK (non self message, kind = 2) [Note: could be acumulative]
+    else if (RecivedMsg->getKind() == 2){
         EV << "Sender"<<" received ACK" <<ReceivedSeqNum << endl;
-
-        for(int i = S_start; i < S_start + dist(S_start, ReceivedSeqNum); i++){
-            S_start=incrementSeqNum(S_start);
+        //Advance the window based on the received Ack [Note: loop is in case of acumulative ACK else it will run only once]
+        int acksNum = dist(S_start, ReceivedSeqNum);
+        for(int i = 0; i < acksNum; i++){
+            S_start = incrementSeqNum(S_start);
             std::string line="";
+            // Get the next line from the file
             char buffer[2];
             while (fgets(buffer, sizeof(buffer), infile) != NULL) {
                 if (buffer[0] == '\n') break;
                 line += buffer;
             }
+            // If the line is not empty (schedule the next message)
             if (line != ""){
-                S_end=incrementSeqNum(S_end);
                 std::string command = line.substr(0, line.find(" "));
                 std::string payload = line.substr(line.find(" ")+1);
-                msgBuffer[S].payload = payload;
-                msgBuffer[S].command = command;
-                S=incrementSeqNum(S);
+                msgBuffer[S_end].payload = payload;
+                msgBuffer[S_end].command = command;
+                S_end=incrementSeqNum(S_end);
+                scheduleAt(simTime() + i * processDelay(), new CustomMessage_Base("", 0));
             }
         }
-
-        if (S_start == incrementSeqNum(FinalAckSent)){
+        // Cancel the timer if the whole window has been acked [Note: that S_start has been updated upove]
+        if (S_start == ackExpected){
             if (timeoutMsgPtr != nullptr){
                 cancelAndDelete(timeoutMsgPtr);
                 timeoutMsgPtr = nullptr;
-            }
-
-            EV << "Sender"<<" all ACK is recived" << endl;
-            S = S_start;
-            EV << "S_start(" << S_start << ")" << endl;
-            EV << "S_end(" << S_end << ")" << endl;
-            EV << "Dist(" << dist(S_start, S_end) << ")" << endl;
-            for(int i = S_start; i < S_start + dist(S_start, S_end); i++){
-                FinalAckSent=i%(WS+1);
-                EV << "Sender"<<" FinalAckSent" << FinalAckSent << endl;
-                scheduleAt(simTime() + (i - S_start) * processDelay(), new CustomMessage_Base("", 0));//the processing time for the next message (self message, kind = 0)
             }
         }
     }
 
     // Sender receives NACK (non self message, kind = 3)
-    else if (RecivedMsg->getKind() == 3){//Sender receives NACK subroutine
+    else if (RecivedMsg->getKind() == 3){
+        //Do nothing (the timer will resend the whole window)
         EV << "Sender"<<" received NACK" << endl;
     }
 
     // Receiver ready to receive a new message (non self message, kind = 1)
-    else if (RecivedMsg->getKind() == 1){//Receiver receives message subroutine
-        EndProcessingTimeStamp = simTime() + processDelay();
-        // Remove escape characters from the payload
-        std::string receivedMsg = RecivedMsg->getPayload();
-        // Check the parity
-        bool isNotCorrupt = checkParity(RecivedMsg);
-        
-        // If the message is not corrupt remove the escape characters
+    else if (RecivedMsg->getKind() == 1){
+        EndProcessingTime = simTime() + processDelay();// Set the end processing time (nothing is received until then)
+        std::string receivedMsg = RecivedMsg->getPayload();// Remove escape characters from the payload
+        bool isNotCorrupt = checkParity(RecivedMsg);// Check the parity
+        // If the message is not corrupt (send the appropriate ACK)
         if(isNotCorrupt){
             EV << "Receiver"<<" received message is not corrupt" << endl;
             EV << "Receiver" << " current seqNum("<<ReceivedSeqNum<<")"<<endl;
@@ -296,6 +288,7 @@ void Node::handleMessage(cMessage *msg){
             if(ReceivedSeqNum == R){//If the message seq num is the expected one increment the expected seqNum
                 R = incrementSeqNum(R);//because the sender wants the next message with the next seqNum
             }
+            // Remove the escape characters
             std::vector<char> msgWithoutEsc;
             bool isPrevEsc = false;
             for (int i=1 ; i< receivedMsg.size()-1 ; i++){
@@ -310,24 +303,25 @@ void Node::handleMessage(cMessage *msg){
                 }
                 msgWithoutEsc.push_back(receivedMsg[i]);
             }
-            // Convert vector back to string
-            std::string msgWithoutEscStr(msgWithoutEsc.begin(), msgWithoutEsc.end());
+            std::string msgWithoutEscStr(msgWithoutEsc.begin(), msgWithoutEsc.end());// Convert vector back to string
             // Send ACK (non self message, kind = 2)
             if (!isLost()){//Send ACK
                 EV <<"ACK" << R<<" is on the way" << endl;
                 CustomMessage_Base* ackmsg = new CustomMessage_Base("");
                 ackmsg->setAckNumber(R);
-                ackmsg->setKind(2);
+                ackmsg->setKind(2);//ACK (non self message, kind = 2)
                 sendDelayed(ackmsg, PT+TD, "out");
             }
         }
-        // Send NACK (non self message, kind = 3)
+        // Send NACK If corrupt
         else{
             EV << "Receiver"<<" received message is corrupt" << endl;
             CustomMessage_Base* nackmsg = new CustomMessage_Base("");
             nackmsg->setAckNumber(R);
-            nackmsg->setKind(3);
+            nackmsg->setKind(3);//NACK (non self message, kind = 3)
             sendDelayed(nackmsg, PT+TD, "out");
         }
     }
+    // Delete the message [Note: lost messages are not deleted here]
+    cancelAndDelete(RecivedMsg);
 }

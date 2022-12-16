@@ -47,7 +47,7 @@ class Node : public cSimpleModule
     double ED = 4.0;
     double DD = 0.1;
     double LP = 0.1;
-    omnetpp::SimTime EndProcessingTimeStamp=simTime();//drop the message if the node is still processing
+    omnetpp::SimTime EndProcessingTime=simTime();//drop the message if the node is still processing
     float msgDelay(std::string command);//-1 don't send loss
     float msgDubDelay(std::string command);//-1 don't send loss or no delay
     float processDelay();//just return PT
@@ -60,7 +60,7 @@ class Node : public cSimpleModule
     unsigned int S = 0;
     unsigned int S_start = 0;
     unsigned int S_end = 0;
-    unsigned int FinalAckSent = 0;
+    unsigned int ackExpected = 0;
     msgWithCommand* msgBuffer = new msgWithCommand[WS];
     FILE *infile;
 };
