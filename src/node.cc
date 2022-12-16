@@ -162,6 +162,7 @@ void Node::handleMessage(cMessage *msg){
     // Drop the message if the node is still processing the previous message
     if (EndProcessingTime > simTime()){
         EV <<"A message has been dropped" << endl;
+        cancelAndDelete(msg);
         return;
     }
     // Get the data from the received frame (msg, seqNum)
@@ -210,34 +211,28 @@ void Node::handleMessage(cMessage *msg){
     else if (RecivedMsg->isSelfMessage() && RecivedMsg->getKind()==0){
         // Specify the time at wich the sender will be free
         EndProcessingTime = simTime() + processDelay();
-
         EV << "Sender" << " current seqNum("<<S<<")"<<endl;
         EV << "Sender" << " using command("<< msgBuffer[S].command <<")" << endl;
         EV << "Sender" << " sending payload("<< msgBuffer[S].payload <<")" << endl;
         // Prepare the message to send (delay calculation, add framing, add parity, add error)
         CustomMessage_Base *msgToSend = new CustomMessage_Base("");
-        
         float delay = msgDelay(msgBuffer[S].command);// Calculate the delay of the message
         float dubDelay = msgDubDelay(msgBuffer[S].command);// Calculate the delay of the dublicate message
-
         EV << "Sender" << " delay("<< delay <<")" << endl;
         EV << "Sender" << " dubDelay("<< dubDelay <<")" << endl;
         EV << "Sender" << " time out delay("<<timeOutDelay()<<")"<<endl;
-
         // Apply Framing
-        std::string stuffedstr = byteStuffing(msgBuffer.payload);
-        // Set the payload with the stuffed message
-        msgToSend -> setPayload(stuffedstr.c_str());
-        // Add parity
-        addParity(msgToSend);
+        std::string stuffedstr = byteStuffing(msgBuffer[S].payload);
+        msgToSend -> setPayload(stuffedstr.c_str());// Set the payload with the stuffed message
+        addParity(msgToSend);// Add parity
         // Done: Apply error if needed
         // Store the index of changed bit if it is -1 then no error
-        int errorIndex = modifyMessage(msgToSend , msgBuffer.command);
-        if (errorIndex != -1)
-        {
-            EV<< "Bit " << errorIndex << " is modified"<<endl;
-            EV<< "Sender" << " sending payload after modification("<< msgToSend->getPayload() <<")" << endl;
-        }
+        // int errorIndex = modifyMessage(msgToSend , msgBuffer[S].command);
+        // if (errorIndex != -1)
+        // {
+        //     EV<< "Bit " << errorIndex << " is modified"<<endl;
+        //     EV<< "Sender" << " sending payload after modification("<< msgToSend->getPayload() <<")" << endl;
+        // }
         msgToSend->setKind(1);// Send a message (non self message, kind = 1)
         msgToSend->setAckNumber(S);
         S = incrementSeqNum(S);
@@ -246,7 +241,7 @@ void Node::handleMessage(cMessage *msg){
             sendDelayed(msgToSend, delay, "out");
         }
         else{
-            cancelAndDelete(msgToSend);// Delete the message if losst
+            cancelAndDelete(msgToSend);// Delete the message if lost
         }
         if (dubDelay != -1){
             // Send the duplicated message to the other node if exists and no loss
@@ -268,16 +263,24 @@ void Node::handleMessage(cMessage *msg){
         EV << "Sender"<<" timeout has happend" << endl;
         S = S_start;
         // Send the whole window
-        for(int i = S_start; i < S_start + dist(S_start, S_end); i++){
-            scheduleAt(simTime() + (i - S_start) * processDelay(), new CustomMessage_Base("", 0));// Schedule a message is (self message, kind = 0)
+        EV << "Sender"<<" S_start: " << S_start << " S_end: " << S_end << endl;
+        int acksNum = dist(S_start, S_end);
+        for(int i = 0; i < WS; i++){
+            EV <<" command: " << msgBuffer[(S+i)%(WS+1)].command << " payload: " << msgBuffer[(S+i)%(WS+1)].payload << endl;
+        }
+        for(int i = 0; i < acksNum; i++){
+            scheduleAt(simTime() + i * processDelay(), new CustomMessage_Base("", 0));// Schedule a message is (self message, kind = 0)
         }
     }
 
     // Sender receives correct ACK (non self message, kind = 2) [Note: could be acumulative]
     else if (RecivedMsg->getKind() == 2){
-        EV << "Sender"<<" received ACK" <<ReceivedSeqNum << endl;
+        EV << "Sender"<<" received ACK " <<ReceivedSeqNum << endl;
+        EV << "Sender"<<" S_start "<<S_start << endl;
+        EV << "Sender"<<" S_end "<<S_end << endl;
         //Advance the window based on the received Ack [Note: loop is in case of acumulative ACK else it will run only once]
         int acksNum = dist(S_start, ReceivedSeqNum);
+        EV << "Sender"<<" acksNum "<<acksNum << endl;
         for(int i = 0; i < acksNum; i++){
             S_start = incrementSeqNum(S_start);
             std::string line="";
@@ -287,13 +290,15 @@ void Node::handleMessage(cMessage *msg){
                 if (buffer[0] == '\n') break;
                 line += buffer;
             }
-            // If the line is not empty (schedule the next message)
+            // If the line is not empty load it to the buffer
             if (line != ""){
                 std::string command = line.substr(0, line.find(" "));
                 std::string payload = line.substr(line.find(" ")+1);
                 msgBuffer[S_end].payload = payload;
                 msgBuffer[S_end].command = command;
                 S_end=incrementSeqNum(S_end);
+            }
+            if(S_start != S_end){
                 scheduleAt(simTime() + i * processDelay(), new CustomMessage_Base("", 0));
             }
         }
@@ -362,5 +367,7 @@ void Node::handleMessage(cMessage *msg){
         }
     }
     // Delete the message [Note: lost messages are not deleted here]
-    cancelAndDelete(RecivedMsg);
+    if(!(RecivedMsg->isSelfMessage() && RecivedMsg->getKind()==1)){//The condition is to not delete the timer when it times out [it is deleted in send operation]
+        cancelAndDelete(RecivedMsg);
+    }
 }
