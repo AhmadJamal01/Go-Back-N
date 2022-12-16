@@ -54,8 +54,13 @@ class Node : public cSimpleModule
     float timeOutDelay();//just return TO
     bool isLost();//return true if ACK or NACK is lost for receiver
     CustomMessage_Base *timeoutMsgPtr = nullptr;
-    int expectedseqNum = 0;
-    msgWithCommand msgBuffer;
+    unsigned int R = 0;
+
+    unsigned int S = 0;
+    unsigned int S_start = 0;
+    unsigned int S_end = 0;
+    
+    msgWithCommand* msgBuffer = new msgWithCommand[WS];
     FILE *infile;
 };
 #endif
