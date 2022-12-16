@@ -1,12 +1,12 @@
 #
-# OMNeT++/OMNEST Makefile for Networks-Project
+# OMNeT++/OMNEST Makefile for Data-Link-Project
 #
 # This file was generated with the command:
 #  opp_makemake -f --deep
 #
 
 # Name of target to be created (-o option)
-TARGET = Networks-Project$(D)$(EXE_SUFFIX)
+TARGET = Data-Link-Project$(D)$(EXE_SUFFIX)
 TARGET_DIR = .
 
 # User interface (uncomment one) (-u option)

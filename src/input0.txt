@@ -1,10 +1,5 @@
-<<<<<<< HEAD
-0000 Kak$ka/k
-0000 saad1
-=======
 0011 Kak$ka/k
 1000 saad1
->>>>>>> a7a3b85f79d11dcae9e4eb2e71544bb55581136c
 0000 saad2
 0000 saad3
 0000 saad4

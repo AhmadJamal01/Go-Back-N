@@ -36,7 +36,6 @@ class Node : public cSimpleModule
     char ESCAPE = '/';
     virtual void initialize();
     virtual void handleMessage(cMessage *msg);
-    void getCurrentNodeState(CustomMessage_Base *msg);
     void addParity (CustomMessage_Base* msg);
     bool checkParity (CustomMessage_Base* msg);
     std::string byteStuffing(std::string message);
@@ -47,24 +46,21 @@ class Node : public cSimpleModule
     double ED = 4.0;
     double DD = 0.1;
     double LP = 0.1;
+    int modifyMessage(CustomMessage_Base* msg ,std::string command );//modify the message to be sent if needed
     omnetpp::SimTime EndProcessingTime=simTime();//drop the message if the node is still processing
     float msgDelay(std::string command);//-1 don't send loss
     float msgDubDelay(std::string command);//-1 don't send loss or no delay
     float processDelay();//just return PT
     float timeOutDelay();//just return TO
     bool isLost();//return true if ACK or NACK is lost for receiver
-<<<<<<< HEAD
-    int dist(int x, int y);
-    int incrementSeqNum(int seqNum);
-=======
-    int modifyMessage(CustomMessage_Base* msg ,std::string command );//modify the message to be sent if needed
->>>>>>> a7a3b85f79d11dcae9e4eb2e71544bb55581136c
     CustomMessage_Base *timeoutMsgPtr = nullptr;
     unsigned int R = 0;
     unsigned int S = 0;
     unsigned int S_start = 0;
     unsigned int S_end = 0;
     unsigned int ackExpected = 0;
+    int dist(int x, int y);
+    int incrementSeqNum(int seqNum);
     msgWithCommand* msgBuffer = new msgWithCommand[WS];
     FILE *infile;
 };

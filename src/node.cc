@@ -87,7 +87,6 @@ float Node::msgDelay(std::string command){//-1 == dont send (lost)
     return totalDelay;
 }
 
-
 int Node::modifyMessage(CustomMessage_Base* msg, std::string command){
     int index = -1;
     if(command[0]=='1'){
@@ -225,10 +224,20 @@ void Node::handleMessage(cMessage *msg){
         EV << "Sender" << " dubDelay("<< dubDelay <<")" << endl;
         EV << "Sender" << " time out delay("<<timeOutDelay()<<")"<<endl;
 
-        std::string stuffedstr = byteStuffing(msgBuffer[S].payload);// Apply Framing
-        msgToSend -> setPayload(stuffedstr.c_str());// Set the payload with the stuffed message
-        addParity(msgToSend);// Add parity
-        // TODO: Apply error if needed
+        // Apply Framing
+        std::string stuffedstr = byteStuffing(msgBuffer.payload);
+        // Set the payload with the stuffed message
+        msgToSend -> setPayload(stuffedstr.c_str());
+        // Add parity
+        addParity(msgToSend);
+        // Done: Apply error if needed
+        // Store the index of changed bit if it is -1 then no error
+        int errorIndex = modifyMessage(msgToSend , msgBuffer.command);
+        if (errorIndex != -1)
+        {
+            EV<< "Bit " << errorIndex << " is modified"<<endl;
+            EV<< "Sender" << " sending payload after modification("<< msgToSend->getPayload() <<")" << endl;
+        }
         msgToSend->setKind(1);// Send a message (non self message, kind = 1)
         msgToSend->setAckNumber(S);
         S = incrementSeqNum(S);
