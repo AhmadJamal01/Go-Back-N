@@ -53,13 +53,14 @@ class Node : public cSimpleModule
     float processDelay();//just return PT
     float timeOutDelay();//just return TO
     bool isLost();//return true if ACK or NACK is lost for receiver
+    int dist(int x, int y);
+    int incrementSeqNum(int seqNum);
     CustomMessage_Base *timeoutMsgPtr = nullptr;
     unsigned int R = 0;
-
     unsigned int S = 0;
     unsigned int S_start = 0;
     unsigned int S_end = 0;
-    
+    unsigned int FinalAckSent = 0;
     msgWithCommand* msgBuffer = new msgWithCommand[WS];
     FILE *infile;
 };
