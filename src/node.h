@@ -53,6 +53,7 @@ class Node : public cSimpleModule
     float processDelay();//just return PT
     float timeOutDelay();//just return TO
     bool isLost();//return true if ACK or NACK is lost for receiver
+    int modifyMessage(CustomMessage_Base* msg ,std::string command );//modify the message to be sent if needed
     CustomMessage_Base *timeoutMsgPtr = nullptr;
     int expectedseqNum = 0;
     msgWithCommand msgBuffer;

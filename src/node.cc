@@ -38,7 +38,7 @@ bool Node::checkParity (CustomMessage_Base* msg){
     }
     std::bitset<8> parity(msg -> getTrailer());
     result = result ^ parity;
-    return !result.all();
+    return result.none();
 }
 
 std::string Node::byteStuffing(std::string message)
@@ -77,6 +77,35 @@ float Node::msgDelay(std::string command){//-1 dont send
         totalDelay=-1;
     }
     return totalDelay;
+}
+
+int Node::modifyMessage(CustomMessage_Base* msg, std::string command){
+    int index = -1;
+    if(command[0]=='1'){
+        // Not sure yet if we need to use probability to modify the message
+        // Uncomment this if we need
+        /*
+        int prob = uniform(0,1) *10;
+        // Modify with prob 80%
+        if (prob < 8)
+        {
+            message[0]=message[0]+1;
+        }
+        */
+       // randomly choose a character to modify depending on the message size
+        std::string message = msg->getPayload();
+        index = uniform(0,1) * message.size();
+        // Convert the char to bitset
+        std::bitset<8> b(message[index]);
+        // Invert the bit
+        b[index%8] = !b[index%8];
+        // Convert the bitset back to char
+        message[index] = (char)b.to_ulong();
+        // Set the modified message
+        msg->setPayload(message.c_str());
+    }
+    // return the modified bit index
+    return index;
 }
 
 float Node::msgDubDelay(std::string command){//-1 dont send
@@ -191,7 +220,14 @@ void Node::handleMessage(cMessage *msg){
         msgToSend -> setPayload(stuffedstr.c_str());
         // Add parity
         addParity(msgToSend);
-        // TODO: Apply error if needed
+        // Done: Apply error if needed
+        // Store the index of changed bit if it is -1 then no error
+        int errorIndex = modifyMessage(msgToSend , msgBuffer.command);
+        if (errorIndex != -1)
+        {
+            EV<< "Bit " << errorIndex << " is modified"<<endl;
+            EV<< "Sender" << " sending payload after modification("<< msgToSend->getPayload() <<")" << endl;
+        }
         // Print the msg to console
         // Set the kind to 1 to differentiate between the coordinator (Kind 0) and the other nodes
         msgToSend->setKind(1);// (non self message, kind = 1)
