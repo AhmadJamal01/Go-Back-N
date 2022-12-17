@@ -227,12 +227,12 @@ void Node::handleMessage(cMessage *msg){
         addParity(msgToSend);// Add parity
         // Done: Apply error if needed
         // Store the index of changed bit if it is -1 then no error
-        // int errorIndex = modifyMessage(msgToSend , msgBuffer[S].command);
-        // if (errorIndex != -1)
-        // {
-        //     EV<< "Bit " << errorIndex << " is modified"<<endl;
-        //     EV<< "Sender" << " sending payload after modification("<< msgToSend->getPayload() <<")" << endl;
-        // }
+        int errorIndex = modifyMessage(msgToSend , msgBuffer[S].command);
+        if (errorIndex != -1)
+        {
+            EV<< "Bit " << errorIndex << " is modified"<<endl;
+            EV<< "Sender" << " sending payload after modification("<< msgToSend->getPayload() <<")" << endl;
+        }
         msgToSend->setKind(1);// Send a message (non self message, kind = 1)
         msgToSend->setAckNumber(S);
         S = incrementSeqNum(S);
@@ -265,6 +265,8 @@ void Node::handleMessage(cMessage *msg){
         // Send the whole window
         EV << "Sender"<<" S_start: " << S_start << " S_end: " << S_end << endl;
         int acksNum = dist(S_start, S_end);
+        // Set the fisrt frame command to zeros
+        msgBuffer[S_start].command = "0000";
         for(int i = 0; i < WS; i++){
             EV <<" command: " << msgBuffer[(S+i)%(WS+1)].command << " payload: " << msgBuffer[(S+i)%(WS+1)].payload << endl;
         }
