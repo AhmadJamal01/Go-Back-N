@@ -18,8 +18,11 @@
 
 #include <omnetpp.h>
 #include "CustomMessage_m.h"
+#include <fstream>
 
 using namespace omnetpp;
+static std::string sender_buffer;
+static std::string receiver_buffer;
 
 /**
  * TODO - Generated class
@@ -63,5 +66,11 @@ class Node : public cSimpleModule
     int incrementSeqNum(int seqNum);
     msgWithCommand* msgBuffer = new msgWithCommand[WS];
     FILE *infile;
+    std::string removeEsc(std::string receivedMsg);
+    std::ofstream outfile;
+    void print1(omnetpp::SimTime processingTime, int index, std::string command);
+    void print2(omnetpp::SimTime processingTime, int index, std::string action, int seqNum, std::string payload, char trailer, int modified, std::string lost, int duplicate, int delay);
+    void print3(omnetpp:: SimTime timeoutTime, int index, int seqNum);
+    void print4(omnetpp::SimTime processingTime, int index, std::string n_ack, int num, std::string loss);
 };
 #endif

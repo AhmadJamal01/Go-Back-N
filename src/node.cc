@@ -146,6 +146,55 @@ int Node::incrementSeqNum(int seqNum){
     int temp = (seqNum+1)%(WS+1);
     return temp;
 }
+
+std::string Node::removeEsc(std::string receivedMsg){
+    std::vector<char> msgWithoutEsc;
+    bool isPrevEsc = false;
+    for (int i=1 ; i< receivedMsg.size()-1 ; i++){
+        if (isPrevEsc){
+            msgWithoutEsc.push_back(receivedMsg[i]);
+            isPrevEsc = false ;
+            continue;
+        }
+        else if (!isPrevEsc && receivedMsg[i]==ESCAPE){
+            isPrevEsc = true;
+            continue;
+        }
+        msgWithoutEsc.push_back(receivedMsg[i]);
+    }
+    std::string msgWithoutEscStr(msgWithoutEsc.begin(), msgWithoutEsc.end());// Convert vector back to string
+    return msgWithoutEscStr;
+    
+}
+
+void Node::print1(omnetpp::SimTime processingTime, int index, std::string command){
+//    auto ss = std::stringstream();
+//    ss << "==At time ["<< processingTime << "], Node [" << index << "], Introducing channel error with code = ["<< command <<"]\n";
+//    auto msg = ss.str();
+//
+//    outfile << msg;
+//    outfile.flush();
+//
+//    sender_buffer += msg;
+//    EV << msg;
+    outfile << "At time ["<< processingTime << "], Node [" << index << "], Introducing channel error with code = ["<< command <<"]\n";
+    EV << "At time ["<< processingTime << "], Node [" << index << "], Introducing channel error with code = ["<< command <<"]\n";
+}
+
+void Node::print2(omnetpp::SimTime processingTime, int index, std::string action, int seqNum, std::string payload, char trailer, int modified, std::string lost, int duplicate, int delay){
+    outfile << "At time ["<< processingTime << "], Node [" << index << "], [" << action << "] frame with seq_num = [" << seqNum << "] and payload = [" << payload << "] and trailer = [" << trailer << "], Modified [" << modified << "] Lost [ " << lost << "], Duplicate [" << duplicate << "], Delay [" << delay << "]" << endl;
+    EV << "At time ["<< processingTime << "], Node [" << index << "], [" << action << "] frame with seq_num = [" << seqNum << "] and payload = [" << payload << "] and trailer = [" << trailer << "], Modified [" << modified << "] Lost [ " << lost << "], Duplicate [" << duplicate << "], Delay [" << delay << "]" << endl;
+}
+
+void Node::print3(omnetpp:: SimTime timeoutTime, int index, int seqNum){
+    outfile << "Time out event at time [" << timeoutTime << "], at Node [ " << index << "] for frame with seq_num = [" << seqNum << "]" << endl;
+    EV << "Time out event at time [" << timeoutTime << "], at Node [ " << index << "] for frame with seq_num = [" << seqNum << "]" << endl;
+}
+
+void Node::print4(omnetpp::SimTime processingTime, int index, std::string n_ack, int num, std::string loss){
+    outfile << "At time [" << processingTime << "], Node [" << index << "], Sending [" << n_ack << "] with number [" << num << "], loss [" << loss << "]" << endl;
+    EV << "At time [" << processingTime << "], Node [" << index << "], Sending [" << n_ack << "] with number [" << num << "], loss [" << loss << "]" << endl;
+}
 //______________________________________________________________________________________________
 void Node::initialize(){
     WS = par("WS");
@@ -155,13 +204,21 @@ void Node::initialize(){
     ED = par("ED");
     DD = par("DD");
     LP = par("LP");
-    EV<<"WS: "<<WS<<", TO: "<<TO<<", PT: "<<PT<<", TD: "<<TD<<", ED: "<<ED<<", DD: "<<DD<<", LP: "<<LP<<endl;
+    //EV<<"WS: "<<WS<<", TO: "<<TO<<", PT: "<<PT<<", TD: "<<TD<<", ED: "<<ED<<", DD: "<<DD<<", LP: "<<LP<<endl;
+
+    // initialize the output file
+    // may be moved to handleMessage
+//    outfile.open("../src/output.txt", std::ofstream::out | std::ofstream::trunc);
+    outfile.open("../src/output.txt", std::ios_base::app);
+//    outfile.clear();
+//    outfile.close();
+//    outfile.open("../src/output.txt", std::ios_base::app);
 }
 
 void Node::handleMessage(cMessage *msg){
     // Drop the message if the node is still processing the previous message
     if (EndProcessingTime > simTime()){
-        EV <<"A message has been dropped" << endl;
+        //EV <<"A message has been dropped" << endl;
         cancelAndDelete(msg);
         return;
     }
@@ -171,19 +228,19 @@ void Node::handleMessage(cMessage *msg){
 
     // Msg from the coordinator to Sender for initializing the communication (non self message, kind = 0)
     if (!RecivedMsg->isSelfMessage() && RecivedMsg->getKind() == 0){
-        EV << "Node "<< getIndex() <<" will act as sender.." << endl;
-        EV << "Node "<< 1-getIndex() <<" will act as receiver.." << endl;
-        EV << "Node "<< getIndex() <<" will start after: " << RecivedMsg->getPayload() << endl;
+        //EV << "Node "<< getIndex() <<" will act as sender.." << endl;
+        //EV << "Node "<< 1-getIndex() <<" will act as receiver.." << endl;
+        //EV << "Node "<< getIndex() <<" will start after: " << RecivedMsg->getPayload() << endl;
         double startTime = double(std::stod(RecivedMsg->getPayload()));
         // Inti the file for reading the input
         char filePath[2048];
         strcpy(filePath, "../src/input");
-        strcat(filePath, std::to_string(getIndex()).c_str());
+        // strcat(filePath, std::to_string(getIndex()).c_str());
         strcat(filePath, ".txt");
         infile=fopen(filePath, "r");
         // Read the first WS messages from the file
+        // Get the a line from the file
         for (int i=0; i<WS; i++){
-            // Get the a line from the file
             std::string line="";
             char buffer[2];
             while (fgets(buffer, sizeof(buffer), infile) != NULL) {
@@ -192,7 +249,7 @@ void Node::handleMessage(cMessage *msg){
             }
             // If the line is empty, break (no more messages to send)
             if (line == ""){
-                EV << "Sender"<<" No new Msg" << endl;
+                //EV << "Sender"<<" No new Msg" << endl;
                 break;
             }
             std::string command = line.substr(0, line.find(" "));
@@ -200,27 +257,46 @@ void Node::handleMessage(cMessage *msg){
             msgBuffer[i].command = command;
             msgBuffer[i].payload = payload;
             S_end= incrementSeqNum(S_end);
-        }
-        // Send the first WS messages (a window)
-        for(int i=0; i < S_end; i++){
-            scheduleAt(simTime() + startTime + i * processDelay(), new CustomMessage_Base("", 0));// Schedule a message is (self message, kind = 0)
+
+            // according to TA's output file, messages in a window are read and sent at the same time
+            // scheduleAt(simTime() + startTime + i * processDelay(), new CustomMessage_Base("", 0));// Schedule a message is (self message, kind = 0)
+            // outfile << "At ["<< simTime() + startTime + i * processDelay() << "], Node [" << getIndex() << "], Introducing channel error with code = ["<< command <<"]" << endl;
+            // EV << "At ["<< simTime() + startTime + i * processDelay() << "], Node [" << getIndex() << "], Introducing channel error with code = ["<< command <<"]" << endl;
+            print1(simTime() + startTime + i*processDelay(), getIndex(), command);
+            scheduleAt(simTime() + startTime + i*processDelay(), new CustomMessage_Base("", 0));// Schedule a message is (self message, kind = 0)
+            // Send the first WS messages (a window)
         }
     }
 
     // Sender ready to send a new message (self message, kind = 0)
     else if (RecivedMsg->isSelfMessage() && RecivedMsg->getKind()==0){
+        // params for the output file
+        // may not use some of them
+        int printTime = -1;
+        std::string nodeStatus = "sent";
+        int modified = -1;
+        std::string lost = "No";
+        int duplicate = -1;
+        int errorDelayInterval = -1;
+        int duplicateVersion = 0;
+
         // Specify the time at wich the sender will be free
         EndProcessingTime = simTime() + processDelay();
-        EV << "Sender" << " current seqNum("<<S<<")"<<endl;
-        EV << "Sender" << " using command("<< msgBuffer[S].command <<")" << endl;
-        EV << "Sender" << " sending payload("<< msgBuffer[S].payload <<")" << endl;
+        //EV << "Sender" << " current seqNum("<<S<<")"<<endl;
+        //EV << "Sender" << " using command("<< msgBuffer[S].command <<")" << endl;
+        //EV << "Sender" << " sending payload("<< msgBuffer[S].payload <<")" << endl;
         // Prepare the message to send (delay calculation, add framing, add parity, add error)
         CustomMessage_Base *msgToSend = new CustomMessage_Base("");
         float delay = msgDelay(msgBuffer[S].command);// Calculate the delay of the message
         float dubDelay = msgDubDelay(msgBuffer[S].command);// Calculate the delay of the dublicate message
-        EV << "Sender" << " delay("<< delay <<")" << endl;
-        EV << "Sender" << " dubDelay("<< dubDelay <<")" << endl;
-        EV << "Sender" << " time out delay("<<timeOutDelay()<<")"<<endl;
+        
+        if(dubDelay != -1){
+            duplicateVersion = 1;
+        }
+
+        //EV << "Sender" << " delay("<< delay <<")" << endl;
+        //EV << "Sender" << " dubDelay("<< dubDelay <<")" << endl;
+        //EV << "Sender" << " time out delay("<<timeOutDelay()<<")"<<endl;
         // Apply Framing
         std::string stuffedstr = byteStuffing(msgBuffer[S].payload);
         msgToSend -> setPayload(stuffedstr.c_str());// Set the payload with the stuffed message
@@ -230,23 +306,47 @@ void Node::handleMessage(cMessage *msg){
         int errorIndex = modifyMessage(msgToSend , msgBuffer[S].command);
         if (errorIndex != -1)
         {
-            EV<< "Bit " << errorIndex << " is modified"<<endl;
-            EV<< "Sender" << " sending payload after modification("<< msgToSend->getPayload() <<")" << endl;
+            //EV<< "Bit " << errorIndex << " is modified"<<endl;
+            //EV<< "Sender" << " sending payload after modification("<< msgToSend->getPayload() <<")" << endl;
+            modified = errorIndex;
         }
+
+        // print here with duplicate versions, handle the version numbers yourself spaghetti
+        if(msgBuffer[S].command[1]=='0' && msgBuffer[S].command[3]=='1'){
+            errorDelayInterval = ED;
+        } else {
+            errorDelayInterval = 0;
+        }
+        if(dubDelay != -1){
+            // duplicate version 1
+            print2(EndProcessingTime, getIndex(), "sent" , S, msgToSend->getPayload(), msgToSend->getTrailer(), errorIndex, "No", 1, errorDelayInterval);
+        } else {
+            // duplicate version 0
+            print2(EndProcessingTime, getIndex(), "sent" , S, msgToSend->getPayload(), msgToSend->getTrailer(), errorIndex, "No", 0, errorDelayInterval);
+        }
+
         msgToSend->setKind(1);// Send a message (non self message, kind = 1)
         msgToSend->setAckNumber(S);
         S = incrementSeqNum(S);
         if (delay != -1){
             // Send the message to the other node if no loss
             sendDelayed(msgToSend, delay, "out");
+            //outfile << "At tune [" << simTime() + delay << "] Node [" << getIndex() << "] [sent] frame with seq_num = [" << msgToSend->getAckNumber() << "] and payload = [" << msgToSend->getPayload() << "] and trailer = [" << msgToSend->getTrailer() << "], Modified [" << errorIndex << "], Lost [No], Duplicate;
+//            printTime = simTime() + delay;
+            // print here with duplicate version 1 x
         }
         else{
             cancelAndDelete(msgToSend);// Delete the message if lost
+            lost = "Yes";
         }
         if (dubDelay != -1){
             // Send the duplicated message to the other node if exists and no loss
+            duplicateVersion = 2;
+            // print here with duplicate version 2 x
             CustomMessage_Base* msgDub = msgToSend -> dup();
             sendDelayed(msgDub, dubDelay, "out");
+            print2(EndProcessingTime + DD, getIndex(), "sent" , S, msgDub->getPayload(), msgDub->getTrailer(), errorIndex, "No", 2, errorDelayInterval);
+
         }
         // Reschedule the timer (every new send)
         if (timeoutMsgPtr!=nullptr){
@@ -260,16 +360,20 @@ void Node::handleMessage(cMessage *msg){
 
     // Sender Timer Timeout (self message, kind = 1)
     else if (RecivedMsg->isSelfMessage() && RecivedMsg->getKind()==1){
-        EV << "Sender"<<" timeout has happend" << endl;
+        
+        // print here time out 
+        print3(simTime(), getIndex(),S);
+
+        //EV << "Sender"<<" timeout has happend" << endl;
         S = S_start;
         // Send the whole window
-        EV << "Sender"<<" S_start: " << S_start << " S_end: " << S_end << endl;
+        //EV << "Sender"<<" S_start: " << S_start << " S_end: " << S_end << endl;
         int acksNum = dist(S_start, S_end);
         // Set the fisrt frame command to zeros
         msgBuffer[S_start].command = "0000";
-        for(int i = 0; i < WS; i++){
-            EV <<" command: " << msgBuffer[(S+i)%(WS+1)].command << " payload: " << msgBuffer[(S+i)%(WS+1)].payload << endl;
-        }
+        //for(int i = 0; i < WS; i++){
+        //    EV <<" command: " << msgBuffer[(S+i)%(WS+1)].command << " payload: " << msgBuffer[(S+i)%(WS+1)].payload << endl;
+        //}
         for(int i = 0; i < acksNum; i++){
             scheduleAt(simTime() + i * processDelay(), new CustomMessage_Base("", 0));// Schedule a message is (self message, kind = 0)
         }
@@ -277,12 +381,12 @@ void Node::handleMessage(cMessage *msg){
 
     // Sender receives correct ACK (non self message, kind = 2) [Note: could be acumulative]
     else if (RecivedMsg->getKind() == 2){
-        EV << "Sender"<<" received ACK " <<ReceivedSeqNum << endl;
-        EV << "Sender"<<" S_start "<<S_start << endl;
-        EV << "Sender"<<" S_end "<<S_end << endl;
+        //EV << "Sender"<<" received ACK " <<ReceivedSeqNum << endl;
+        //EV << "Sender"<<" S_start "<<S_start << endl;
+        //EV << "Sender"<<" S_end "<<S_end << endl;
         //Advance the window based on the received Ack [Note: loop is in case of acumulative ACK else it will run only once]
         int acksNum = dist(S_start, ReceivedSeqNum);
-        EV << "Sender"<<" acksNum "<<acksNum << endl;
+        //EV << "Sender"<<" acksNum "<<acksNum << endl;
         for(int i = 0; i < acksNum; i++){
             S_start = incrementSeqNum(S_start);
             std::string line="";
@@ -299,8 +403,19 @@ void Node::handleMessage(cMessage *msg){
                 msgBuffer[S_end].payload = payload;
                 msgBuffer[S_end].command = command;
                 S_end=incrementSeqNum(S_end);
+
+                // print here reading from file
+                print1(simTime() + i * processDelay(), getIndex(), command);
+            }else{
+                // end of file? tick
+                // close output file
+                // EV << "==============================================" << endl;
+                // EV << sender_buffer << endl;
+                outfile.close();
             }
             if(S_start != S_end){
+                // print here sending x
+                // print2(outfile, simTime() + i * processDelay(), getIndex(), "sent" , S, msgBuffer[S].payload, msgBuffer[S].command, errorIndex, "No", 0, 0);
                 scheduleAt(simTime() + i * processDelay(), new CustomMessage_Base("", 0));
             }
         }
@@ -316,7 +431,7 @@ void Node::handleMessage(cMessage *msg){
     // Sender receives NACK (non self message, kind = 3)
     else if (RecivedMsg->getKind() == 3){
         //Do nothing (the timer will resend the whole window)
-        EV << "Sender"<<" received NACK" << endl;
+        //EV << "Sender"<<" received NACK" << endl;
     }
 
     // Receiver ready to receive a new message (non self message, kind = 1)
@@ -326,45 +441,43 @@ void Node::handleMessage(cMessage *msg){
         bool isNotCorrupt = checkParity(RecivedMsg);// Check the parity
         // If the message is not corrupt (send the appropriate ACK)
         if(isNotCorrupt){
-            EV << "Receiver"<<" received message is not corrupt" << endl;
-            EV << "Receiver" << " current seqNum("<<ReceivedSeqNum<<")"<<endl;
-            EV << "Receiver" << " expected seqNum("<<R<<")"<<endl;
-            EV << "Receiver"<<" received payload("<< receivedMsg <<")" << endl;
-            EV << "Receiver" << " delay("<<PT+TD<<")"<<endl;
+            //EV << "Receiver"<<" received message is not corrupt" << endl;
+            //EV << "Receiver" << " current seqNum("<<ReceivedSeqNum<<")"<<endl;
+            //EV << "Receiver" << " expected seqNum("<<R<<")"<<endl;
+            //EV << "Receiver"<<" received payload("<< receivedMsg <<")" << endl;
+            //EV << "Receiver" << " delay("<<PT+TD<<")"<<endl;
             if(ReceivedSeqNum == R){//If the message seq num is the expected one increment the expected seqNum
+                // print here sending ackx
+                
                 R = incrementSeqNum(R);//because the sender wants the next message with the next seqNum
+
             }
             // Remove the escape characters
-            std::vector<char> msgWithoutEsc;
-            bool isPrevEsc = false;
-            for (int i=1 ; i< receivedMsg.size()-1 ; i++){
-                if (isPrevEsc){
-                    msgWithoutEsc.push_back(receivedMsg[i]);
-                    isPrevEsc = false ;
-                    continue;
-                }
-                else if (!isPrevEsc && receivedMsg[i]==ESCAPE){
-                    isPrevEsc = true;
-                    continue;
-                }
-                msgWithoutEsc.push_back(receivedMsg[i]);
-            }
-            std::string msgWithoutEscStr(msgWithoutEsc.begin(), msgWithoutEsc.end());// Convert vector back to string
+            std::string msgWithoutEscStr = removeEsc(receivedMsg);
             // Send ACK (non self message, kind = 2)
             if (!isLost()){//Send ACK
-                EV <<"ACK" << R<<" is on the way" << endl;
+                //EV <<"ACK" << R<<" is on the way" << endl;
                 CustomMessage_Base* ackmsg = new CustomMessage_Base("");
                 ackmsg->setAckNumber(R);
                 ackmsg->setKind(2);//ACK (non self message, kind = 2)
                 sendDelayed(ackmsg, PT+TD, "out");
+
+                // print here sending ack with not lost
+                print4(simTime()+PT, getIndex(), "ACK", R, "No");
+            }else {
+                print4(simTime()+PT, getIndex(), "ACK", R, "Yes");
             }
         }
         // Send NACK If corrupt
         else{
-            EV << "Receiver"<<" received message is corrupt" << endl;
+            //EV << "Receiver"<<" received message is corrupt" << endl;
             CustomMessage_Base* nackmsg = new CustomMessage_Base("");
             nackmsg->setAckNumber(R);
             nackmsg->setKind(3);//NACK (non self message, kind = 3)
+
+            // print here sending nack
+            print4(simTime()+PT , getIndex(), "NACK", R, "No");
+
             sendDelayed(nackmsg, PT+TD, "out");
         }
     }
