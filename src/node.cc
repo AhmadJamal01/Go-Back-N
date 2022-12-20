@@ -238,33 +238,8 @@ void Node::handleMessage(cMessage *msg){
         // strcat(filePath, std::to_string(getIndex()).c_str());
         strcat(filePath, ".txt");
         infile=fopen(filePath, "r");
-        // Read the first WS messages from the file
-        // Get the a line from the file
-        for (int i=0; i<WS; i++){
-            std::string line="";
-            char buffer[2];
-            while (fgets(buffer, sizeof(buffer), infile) != NULL) {
-                if (buffer[0] == '\n') break;
-                line += buffer;
-            }
-            // If the line is empty, break (no more messages to send)
-            if (line == ""){
-                //EV << "Sender"<<" No new Msg" << endl;
-                break;
-            }
-            std::string command = line.substr(0, line.find(" "));
-            std::string payload = line.substr(line.find(" ") + 1);
-            msgBuffer[i].command = command;
-            msgBuffer[i].payload = payload;
-            S_end= incrementSeqNum(S_end);
-
-            // according to TA's output file, messages in a window are read and sent at the same time
-            // scheduleAt(simTime() + startTime + i * processDelay(), new CustomMessage_Base("", 0));// Schedule a message is (self message, kind = 0)
-            // outfile << "At ["<< simTime() + startTime + i * processDelay() << "], Node [" << getIndex() << "], Introducing channel error with code = ["<< command <<"]" << endl;
-            // EV << "At ["<< simTime() + startTime + i * processDelay() << "], Node [" << getIndex() << "], Introducing channel error with code = ["<< command <<"]" << endl;
-            print1(simTime() + startTime + i*processDelay(), getIndex(), command);
-            scheduleAt(simTime() + startTime + i*processDelay(), new CustomMessage_Base("", 0));// Schedule a message is (self message, kind = 0)
-            // Send the first WS messages (a window)
+        for (int i=0;i<WS;i++){
+            scheduleAt(simTime() + startTime + i * processDelay(), new CustomMessage_Base("", 0));// Schedule a message is (self message, kind = 0)
         }
     }
 
@@ -279,7 +254,24 @@ void Node::handleMessage(cMessage *msg){
         int duplicate = -1;
         int errorDelayInterval = -1;
         int duplicateVersion = 0;
-
+        if (dist(S_start, S_end) < WS){
+            std::string line="";
+            char buffer[2];
+            while (fgets(buffer, sizeof(buffer), infile) != NULL) {
+                if (buffer[0] == '\n') break;
+                line += buffer;
+            }
+            // If the line is empty, break (no more messages to send)
+            if (line != ""){
+                //EV << "Sender"<<" No new Msg" << endl;
+                std::string command = line.substr(0, line.find(" "));
+                std::string payload = line.substr(line.find(" ") + 1);
+                msgBuffer[S].command = command;
+                msgBuffer[S].payload = payload;
+                S_end= incrementSeqNum(S_end);
+                print1(simTime(), getIndex(), command);
+            }
+        }
         // Specify the time at wich the sender will be free
         EndProcessingTime = simTime() + processDelay();
         //EV << "Sender" << " current seqNum("<<S<<")"<<endl;
@@ -324,7 +316,6 @@ void Node::handleMessage(cMessage *msg){
             // duplicate version 0
             print2(EndProcessingTime, getIndex(), "sent" , S, msgToSend->getPayload(), msgToSend->getTrailer(), errorIndex, "No", 0, errorDelayInterval);
         }
-
         msgToSend->setKind(1);// Send a message (non self message, kind = 1)
         msgToSend->setAckNumber(S);
         S = incrementSeqNum(S);
@@ -389,32 +380,7 @@ void Node::handleMessage(cMessage *msg){
         //EV << "Sender"<<" acksNum "<<acksNum << endl;
         for(int i = 0; i < acksNum; i++){
             S_start = incrementSeqNum(S_start);
-            std::string line="";
-            // Get the next line from the file
-            char buffer[2];
-            while (fgets(buffer, sizeof(buffer), infile) != NULL) {
-                if (buffer[0] == '\n') break;
-                line += buffer;
-            }
-            // If the line is not empty load it to the buffer
-            if (line != ""){
-                std::string command = line.substr(0, line.find(" "));
-                std::string payload = line.substr(line.find(" ")+1);
-                msgBuffer[S_end].payload = payload;
-                msgBuffer[S_end].command = command;
-                S_end=incrementSeqNum(S_end);
-
-                // print here reading from file
-                print1(simTime() + i * processDelay(), getIndex(), command);
-            }else{
-                // end of file? tick
-                // close output file
-                // EV << "==============================================" << endl;
-                // EV << sender_buffer << endl;
-                outfile.close();
-            }
             if(S_start != S_end){
-                // print here sending x
                 // print2(outfile, simTime() + i * processDelay(), getIndex(), "sent" , S, msgBuffer[S].payload, msgBuffer[S].command, errorIndex, "No", 0, 0);
                 scheduleAt(simTime() + i * processDelay(), new CustomMessage_Base("", 0));
             }
