@@ -56,7 +56,7 @@ class Node : public cSimpleModule
     float processDelay();//just return PT
     float timeOutDelay();//just return TO
     bool isLost();//return true if ACK or NACK is lost for receiver
-    CustomMessage_Base *timeoutMsgPtr = nullptr;
+    CustomMessage_Base **timeoutMsgPtr = new CustomMessage_Base*[WS];
     unsigned int R = 0;
     unsigned int S = 0;
     unsigned int S_start = 0;
@@ -72,5 +72,7 @@ class Node : public cSimpleModule
     void print2(omnetpp::SimTime processingTime, int index, std::string action, int seqNum, std::string payload, char trailer, int modified, std::string lost, int duplicate, int delay);
     void print3(omnetpp:: SimTime timeoutTime, int index, int seqNum);
     void print4(omnetpp::SimTime processingTime, int index, std::string n_ack, int num, std::string loss);
+    int nackSeqNum = -1;
+    int dist_start_end = 0;
 };
 #endif
