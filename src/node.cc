@@ -177,23 +177,26 @@ void Node::print1(omnetpp::SimTime processingTime, int index, std::string comman
 //
 //    sender_buffer += msg;
 //    EV << msg;
-    outfile << "At time ["<< processingTime << "], Node [" << index << "], Introducing channel error with code = ["<< command <<"]\n";
-    EV << "At time ["<< processingTime << "], Node [" << index << "], Introducing channel error with code = ["<< command <<"]\n";
+    outfile << "At time ["<< processingTime << "], Node[" << index << "], Introducing channel error with code = ["<< command <<"]\n";
+    EV << "At time ["<< processingTime << "], Node[" << index << "], Introducing channel error with code = ["<< command <<"]\n";
 }
 
 void Node::print2(omnetpp::SimTime processingTime, int index, std::string action, int seqNum, std::string payload, char trailer, int modified, std::string lost, int duplicate, int delay){
-    outfile << "At time ["<< processingTime << "], Node [" << index << "], [" << action << "] frame with seq_num = [" << seqNum << "] and payload = [" << payload << "] and trailer = [" << trailer << "], Modified [" << modified << "] Lost [ " << lost << "], Duplicate [" << duplicate << "], Delay [" << delay << "]" << endl;
-    EV << "At time ["<< processingTime << "], Node [" << index << "], [" << action << "] frame with seq_num = [" << seqNum << "] and payload = [" << payload << "] and trailer = [" << trailer << "], Modified [" << modified << "] Lost [ " << lost << "], Duplicate [" << duplicate << "], Delay [" << delay << "]" << endl;
+    std::bitset<8> b(trailer);
+    std::string trailerStr = b.to_string();
+    trailerStr = trailerStr.substr(0,4);
+    outfile << "At time ["<< processingTime << "], Node[" << index << "], [" << action << "] frame with seq_num = [" << seqNum << "] and payload = [" << payload << "] and trailer = [" << trailerStr << "], Modified [" << modified << "] Lost [ " << lost << "], Duplicate [" << duplicate << "], Delay [" << delay << "]" << endl;
+    EV << "At time ["<< processingTime << "], Node[" << index << "], [" << action << "] frame with seq_num = [" << seqNum << "] and payload = [" << payload << "] and trailer = [" << trailerStr << "], Modified [" << modified << "] Lost [ " << lost << "], Duplicate [" << duplicate << "], Delay [" << delay << "]" << endl;
 }
 
 void Node::print3(omnetpp:: SimTime timeoutTime, int index, int seqNum){
-    outfile << "Time out event at time [" << timeoutTime << "], at Node [ " << index << "] for frame with seq_num = [" << seqNum << "]" << endl;
-    EV << "Time out event at time [" << timeoutTime << "], at Node [ " << index << "] for frame with seq_num = [" << seqNum << "]" << endl;
+    outfile << "Time out event at time ["<< timeoutTime <<"], at Node[" << index << "] for frame with seq_num = [" << seqNum << "]" << endl;
+    EV << "Time out event at time [" << timeoutTime << "], at Node[" << index << "] for frame with seq_num = [" << seqNum << "]" << endl;
 }
 
 void Node::print4(omnetpp::SimTime processingTime, int index, std::string n_ack, int num, std::string loss){
-    outfile << "At time [" << processingTime << "], Node [" << index << "], Sending [" << n_ack << "] with number [" << num << "], loss [" << loss << "]" << endl;
-    EV << "At time [" << processingTime << "], Node [" << index << "], Sending [" << n_ack << "] with number [" << num << "], loss [" << loss << "]" << endl;
+    outfile << "At time [" << processingTime << "], Node[" << index << "], Sending [" << n_ack << "] with number [" << num << "], loss [" << loss << "]" << endl;
+    EV << "At time [" << processingTime << "], Node[" << index << "], Sending [" << n_ack << "] with number [" << num << "], loss [" << loss << "]" << endl;
 }
 //______________________________________________________________________________________________
 void Node::initialize(){
@@ -236,7 +239,7 @@ void Node::handleMessage(cMessage *msg){
         // Inti the file for reading the input
         char filePath[2048];
         strcpy(filePath, "../src/input");
-        // strcat(filePath, std::to_string(getIndex()).c_str());
+        strcat(filePath, std::to_string(getIndex()).c_str());
         strcat(filePath, ".txt");
         infile=fopen(filePath, "r");
         for (int i=0;i<WS;i++){
