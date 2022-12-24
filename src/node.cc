@@ -253,11 +253,11 @@ void Node::handleMessage(cMessage *msg){
         //EV << "Sender"<<" Ready to send a new Msg" << endl;
         // params for the output file
         // may not use some of them
-        int printTime = -1;
+//        int printTime = -1;
         std::string nodeStatus = "sent";
         int modified = -1;
         std::string lost = "No";
-        int duplicate = -1;
+//        int duplicate = -1;
         int errorDelayInterval = -1;
         int duplicateVersion = 0;
         if (dist_start_end < WS){
